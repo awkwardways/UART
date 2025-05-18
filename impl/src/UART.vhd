@@ -2,7 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity better_uart is
+entity uart is
   generic(
     system_clock_freq : natural := 27e6;
     uart_baud : integer := 9600
@@ -17,9 +17,9 @@ entity better_uart is
     ctsn            : in std_logic; --Clear to send. Active low
     system_clock_in : in std_logic
   );
-end entity better_uart;
+end entity uart;
 
-architecture rtl of better_uart is
+architecture rtl of uart is
   type rx_state_t is (r_idle, r_data, r_stop_bit);
   type tx_state_t is (t_idle, t_data, t_stop_bit);
   signal bauds : std_logic;
