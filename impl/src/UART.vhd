@@ -5,11 +5,13 @@ use ieee.numeric_std.all;
 entity uart is
   generic(
     system_clock_freq : natural := 27e6;
-    uart_baud : integer := 9600
+    uart_baud : natural := 9600;
+    input_bus_width : natural := 8;
+    output_bus_width : natural := 8
   );
   port(
-    data_in         : in std_logic_vector(7 downto 0);
-    data_out        : out std_logic_vector(7 downto 0);
+    data_in         : in std_logic_vector(input_bus_width - 1 downto 0);
+    data_out        : out std_logic_vector(output_bus_width - 1 downto 0);
     tx              : out std_logic := '1';
     rx              : in std_logic;
     wrn             : in std_logic; --Write to register. Active low
@@ -25,8 +27,8 @@ architecture rtl of uart is
   signal bauds : std_logic;
   signal rx_state : rx_state_t := r_idle;
   signal tx_state : tx_state_t := t_idle;
-  signal rx_register : std_logic_vector(7 downto 0) := x"00";
-  signal tx_register : std_logic_vector(7 downto 0) := x"00";
+  signal rx_register : std_logic_vector(input_bus_width - 1 downto 0) := (others => '0');
+  signal tx_register : std_logic_vector(output_bus_width - 1 downto 0) := (others => '0');
 begin
 
   baud_generator: entity work.clock_divider(rtl)
@@ -47,6 +49,8 @@ begin
 
       if rdn = '0' then
         data_out <= rx_register;
+      else 
+        data_out <= (others => '0');
       end if;
 
       case rx_state is
@@ -61,17 +65,13 @@ begin
         when r_data =>
           rx_register(bits_received) <= rx;
           bits_received := bits_received + 1;
-          if bits_received = 8 then
+          if bits_received = input_bus_width then
             rx_state <= r_stop_bit;
             bits_received := 0;
           end if;
 
         when r_stop_bit =>
-          if rx = '1' then
-            rx_state <= r_idle;
-          else
-            rx_state <= r_data;
-          end if;
+          rx_state <= r_idle;
           
       end case;
     end if;
@@ -86,29 +86,30 @@ begin
         tx_register <= data_in;
       end if;
 
-      if ctsn = '0' then
-        case tx_state is
-
-          --Send starting bit
-          when t_idle =>
-            tx <= '0';
+      case tx_state is
+        --Send starting bit
+        when t_idle =>
+          tx <= ctsn;
+          if ctsn = '0' then
             tx_state <= t_data;
+          else
+            tx_state <= t_idle;
+          end if;
 
-          --Send data LSB first
-          when t_data =>
-            tx <= tx_register(sent_bits);
-            sent_bits := sent_bits + 1;
-            if sent_bits = 8 then
-              tx_state <= t_stop_bit;
-              sent_bits := 0;
-            end if;
-          
-          when t_stop_bit =>
-            tx <= '1';
-            tx_state <= t_idle;  
+        --Send data LSB first
+        when t_data =>
+          tx <= tx_register(sent_bits);
+          sent_bits := sent_bits + 1;
+          if sent_bits = output_bus_width then
+            tx_state <= t_stop_bit;
+            sent_bits := 0;
+          end if;
+        
+        when t_stop_bit =>
+          tx <= '1';
+          tx_state <= t_idle;  
 
-        end case;        
-      end if;
+      end case;        
     end if;
   end process transmit;
 
